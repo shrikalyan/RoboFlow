@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RoboFlow – Stochastic Warehouse Robot Task Allocation</title>
+    <!-- Modern Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- TOP HEADER BAR -->
+        <header class="header-bar">
+            <div class="brand">
+                <div class="brand-icon">
+                    <i class="fa-solid fa-microchip-ai"></i>
+                    <span class="pulse-ring"></span>
+                </div>
+                <div class="brand-text">
+                    <h1>RoboFlow <span class="badge-version">v2.5 Pro</span></h1>
+                    <p class="subtitle">Stochastic Warehouse Autonomous Robot Task Allocation & Resilient Optimization</p>
+                </div>
+            </div>
+
+            <!-- CONTROLS TOOLBAR -->
+            <div class="control-toolbar">
+                <div class="control-group">
+                    <label for="strategySelect"><i class="fa-solid fa-brain"></i> Allocation Strategy</label>
+                    <select id="strategySelect" class="styled-select">
+                        <option value="stochastic" selected>Stochastic (Risk-Averse & Resilient)</option>
+                        <option value="deterministic">Deterministic (Nominal / Greedy)</option>
+                        <option value="compare">Side-by-Side Dual Comparison</option>
+                    </select>
+                </div>
+
+                <div class="control-group slider-group">
+                    <div class="slider-header">
+                        <label for="breakdownSlider"><i class="fa-solid fa-triangle-exclamation"></i> Breakdown Hazard</label>
+                        <span id="breakdownValBadge" class="val-badge">5%</span>
+                    </div>
+                    <input type="range" id="breakdownSlider" min="0" max="25" step="1" value="5">
+                </div>
+
+                <div class="control-group">
+                    <label for="congestionSelect"><i class="fa-solid fa-traffic-light"></i> Aisle Congestion</label>
+                    <select id="congestionSelect" class="styled-select">
+                        <option value="low">Low (Light Traffic)</option>
+                        <option value="medium" selected>Medium (Standard Shift)</option>
+                        <option value="high">High (Peak Congestion)</option>
+                    </select>
+                </div>
+
+                <div class="action-buttons">
+                    <button id="btnRunSim" class="btn btn-primary">
+                        <i class="fa-solid fa-play"></i> Run Simulation
+                    </button>
+                    <button id="btnMonteCarlo" class="btn btn-secondary">
+                        <i class="fa-solid fa-dice-d20"></i> Monte Carlo (100 Runs)
+                    </button>
+                    <button id="btnSensitivity" class="btn btn-accent">
+                        <i class="fa-solid fa-chart-line"></i> Sensitivity Curve
+                    </button>
+                    <button id="btnReset" class="btn btn-ghost" title="Reset Simulation">
+                        <i class="fa-solid fa-rotate-left"></i> Reset
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- KPI SUMMARY CARDS -->
+        <section class="kpi-section">
+            <div class="kpi-card glassmorphic">
+                <div class="kpi-icon-wrap cyan">
+                    <i class="fa-solid fa-stopwatch"></i>
+                </div>
+                <div class="kpi-body">
+                    <span class="kpi-label">Realized Makespan</span>
+                    <div class="kpi-val-row">
+                        <h2 id="kpiMakespan">--</h2>
+                        <span class="kpi-unit">sec</span>
+                    </div>
+                    <span id="kpiMakespanSub" class="kpi-sub">Awaiting simulation run</span>
+                </div>
+            </div>
+
+            <div class="kpi-card glassmorphic">
+                <div class="kpi-icon-wrap emerald">
+                    <i class="fa-solid fa-bullseye"></i>
+                </div>
+                <div class="kpi-body">
+                    <span class="kpi-label">On-Time Completion</span>
+                    <div class="kpi-val-row">
+                        <h2 id="kpiOnTime">--</h2>
+                        <span class="kpi-unit">%</span>
+                    </div>
+                    <span id="kpiOnTimeSub" class="kpi-sub">Target SLA: 95.0%</span>
+                </div>
+            </div>
+
+            <div class="kpi-card glassmorphic">
+                <div class="kpi-icon-wrap amber">
+                    <i class="fa-solid fa-truck-ramp-box"></i>
+                </div>
+                <div class="kpi-body">
+                    <span class="kpi-label">Completed Tasks</span>
+                    <div class="kpi-val-row">
+                        <h2 id="kpiTasksDone">0</h2>
+                        <span class="kpi-unit">/ 20</span>
+                    </div>
+                    <span id="kpiTasksSub" class="kpi-sub">All 20 warehouse tasks</span>
+                </div>
+            </div>
+
+            <div class="kpi-card glassmorphic">
+                <div class="kpi-icon-wrap red">
+                    <i class="fa-solid fa-burst"></i>
+                </div>
+                <div class="kpi-body">
+                    <span class="kpi-label">Breakdowns / Rescued</span>
+                    <div class="kpi-val-row">
+                        <h2 id="kpiBreakdowns">0</h2>
+                        <span class="kpi-unit">events</span>
+                    </div>
+                    <span id="kpiBreakdownsSub" class="kpi-sub">0 dynamic reassignments</span>
+                </div>
+            </div>
+
+            <div class="kpi-card glassmorphic">
+                <div class="kpi-icon-wrap purple">
+                    <i class="fa-solid fa-battery-bolt"></i>
+                </div>
+                <div class="kpi-body">
+                    <span class="kpi-label">Energy Consumed</span>
+                    <div class="kpi-val-row">
+                        <h2 id="kpiEnergy">--</h2>
+                        <span class="kpi-unit">kWh</span>
+                    </div>
+                    <span id="kpiEnergySub" class="kpi-sub">5 Autonomous AMRs</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- MAIN CONTENT WORKSPACE -->
+        <main class="main-grid">
+            <!-- LEFT COLUMN: 2D WAREHOUSE CANVAS -->
+            <div class="card glassmorphic floorplan-card">
+                <div class="card-header">
+                    <div class="header-title">
+                        <i class="fa-solid fa-warehouse"></i>
+                        <h3>Interactive Warehouse Floor (100m &times; 80m Grid)</h3>
+                    </div>
+                    <div class="canvas-controls">
+                        <button id="btnPlayPause" class="mini-btn" title="Play/Pause Replay">
+                            <i class="fa-solid fa-pause"></i>
+                        </button>
+                        <div class="speed-selector">
+                            <span class="speed-label">Speed:</span>
+                            <button class="speed-btn active" data-speed="1">1x</button>
+                            <button class="speed-btn" data-speed="3">3x</button>
+                            <button class="speed-btn" data-speed="8">8x</button>
+                        </div>
+                        <div class="sim-time-badge">
+                            <i class="fa-regular fa-clock"></i>
+                            <span id="simTimeLabel">T: 0.0s</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="canvas-wrapper">
+                    <canvas id="warehouseCanvas" width="1000" height="700"></canvas>
+                    <div id="canvasOverlay" class="canvas-overlay">
+                        <div class="legend-bar">
+                            <div class="legend-item"><span class="legend-dot cyan"></span> R-1 Atlas</div>
+                            <div class="legend-item"><span class="legend-dot blue"></span> R-2 Bolt</div>
+                            <div class="legend-item"><span class="legend-dot purple"></span> R-3 Titan</div>
+                            <div class="legend-item"><span class="legend-dot emerald"></span> R-4 Nova</div>
+                            <div class="legend-item"><span class="legend-dot amber"></span> R-5 Echo</div>
+                            <div class="legend-item"><span class="legend-dot pickup-pin"></span> Pick Point</div>
+                            <div class="legend-item"><span class="legend-dot drop-pin"></span> Drop Point</div>
+                            <div class="legend-item"><span class="legend-dot dock-pin"></span> Charging Dock</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="warehouse-footer">
+                    <div class="stat-pill"><i class="fa-solid fa-arrows-to-dot"></i> Distance: <strong id="totalDistLabel">0.0 m</strong></div>
+                    <div class="stat-pill"><i class="fa-solid fa-bolt"></i> Recharging Trips: <strong id="rechargeTripsLabel">0</strong></div>
+                    <div class="stat-pill"><i class="fa-solid fa-shield-halved"></i> Active Strategy: <strong id="activeStrategyBadge">Stochastic</strong></div>
+                </div>
+            </div>
+
+            <!-- RIGHT COLUMN: ROBOT FLEET STATUS & SYSTEM LOGS -->
+            <div class="card glassmorphic side-panel-card">
+                <div class="tabs-nav">
+                    <button class="tab-btn active" data-tab="tab-fleet"><i class="fa-solid fa-robot"></i> Robot Fleet (5)</button>
+                    <button class="tab-btn" data-tab="tab-tasks"><i class="fa-solid fa-list-check"></i> Tasks (20)</button>
+                    <button class="tab-btn" data-tab="tab-events"><i class="fa-solid fa-terminal"></i> Live Telemetry Log</button>
+                </div>
+
+                <div class="tab-content active" id="tab-fleet">
+                    <div id="fleetContainer" class="fleet-list">
+                        <!-- Populated dynamically via JS -->
+                    </div>
+                </div>
+
+                <div class="tab-content" id="tab-tasks">
+                    <div class="task-table-wrapper">
+                        <table class="styled-table" id="taskTable">
+                            <thead>
+                                <tr>
+                                    <th>Task</th>
+                                    <th>Priority</th>
+                                    <th>Robot</th>
+                                    <th>Status</th>
+                                    <th>Deadline</th>
+                                    <th>Finish</th>
+                                </tr>
+                            </thead>
+                            <tbody id="taskTableBody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="tab-events">
+                    <div id="eventLogContainer" class="event-log-container">
+                        <div class="log-entry system">
+                            <span class="log-time">[00:00.0]</span>
+                            <span class="log-msg">RoboFlow system ready. Configure parameters and click 'Run Simulation'.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- ANALYTICAL CHARTS & COMPARISON DASHBOARD -->
+        <section class="analytics-section">
+            <!-- CHART 1: Real-time / Dual Comparison -->
+            <div class="card glassmorphic chart-card">
+                <div class="card-header">
+                    <div class="header-title">
+                        <i class="fa-solid fa-code-compare"></i>
+                        <h3>Deterministic vs Stochastic Policy Comparison</h3>
+                    </div>
+                    <span class="card-badge" id="compBadge">Dynamic Test</span>
+                </div>
+                <div class="chart-container">
+                    <canvas id="comparisonChart"></canvas>
+                </div>
+                <div class="chart-explainer" id="compExplainer">
+                    Stochastic allocation accounts for travel time variance and breakdown risks, preventing costly queue bottlenecks.
+                </div>
+            </div>
+
+            <!-- CHART 2: Monte Carlo 100-Scenario Distribution -->
+            <div class="card glassmorphic chart-card">
+                <div class="card-header">
+                    <div class="header-title">
+                        <i class="fa-solid fa-dice-d20"></i>
+                        <h3>100-Scenario Monte Carlo Makespan Distribution</h3>
+                    </div>
+                    <span class="card-badge purple" id="mcBadge">N = 100</span>
+                </div>
+                <div class="chart-container">
+                    <canvas id="monteCarloChart"></canvas>
+                </div>
+                <div class="chart-stats-grid" id="mcStatsGrid">
+                    <div class="mini-stat"><span>Stochastic Mean:</span> <strong id="stochMeanVal">--</strong></div>
+                    <div class="mini-stat"><span>Deterministic Mean:</span> <strong id="detMeanVal">--</strong></div>
+                    <div class="mini-stat"><span>95% Worst-Case VaR:</span> <strong id="varDiffVal">--</strong></div>
+                    <div class="mini-stat"><span>Stochastic Win Rate:</span> <strong id="winRateVal">--</strong></div>
+                </div>
+            </div>
+
+            <!-- CHART 3: Breakdown Sensitivity Curve -->
+            <div class="card glassmorphic chart-card wide-card">
+                <div class="card-header">
+                    <div class="header-title">
+                        <i class="fa-solid fa-chart-line"></i>
+                        <h3>Sensitivity Analysis: Breakdown Probability vs Expected Makespan</h3>
+                    </div>
+                    <span class="card-badge amber">Parameter Sweep (0% - 25%)</span>
+                </div>
+                <div class="chart-container wide-chart">
+                    <canvas id="sensitivityChart"></canvas>
+                </div>
+                <div class="chart-explainer">
+                    Notice how the Deterministic makespan curve degrades steeply as breakdown hazard increases, while the Stochastic allocation curve maintains resilience through intelligent load-balancing and risk-hedged routing.
+                </div>
+            </div>
+        </section>
+
+        <!-- FOOTER -->
+        <footer class="app-footer">
+            <p>RoboFlow &copy; 2026 – Advanced Stochastic Multi-Robot Task Allocation System. Formulated with Chance-Constrained Optimization & Dynamic Recourse Reassignment.</p>
+        </footer>
+    </div>
+
+    <!-- NOTIFICATION TOAST -->
+    <div id="toastNotification" class="toast-notification"></div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
